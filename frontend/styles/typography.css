@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+.large {
+    font-family: var(--font-inter-sans), system-ui, sans-serif;
+    font-size: 18px;
+    line-height: 1.4;
+    font-weight: 600;
+}
+
+.medium {
+    font-family: var(--font-inter-sans), system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.4;
+    font-weight: 500;
+}
+
+.body {
+    font-family: var(--font-inter-sans), system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    font-weight: 400;
+}

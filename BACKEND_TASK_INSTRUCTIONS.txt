@@ -1,0 +1,332 @@
+BACKEND API TASK FOR EXPRESS
+
+===========================================
+WHAT NEEDS TO BE DONE:
+===========================================
+
+Your task is to create Express API endpoints that will:
+1. Accept file uploads (CSV list and PDF certificate) from the frontend
+2. Store these files on the server
+3. Generate certificates by combining the CSV data with the PDF template
+4. Return the generated certificates back to the frontend
+
+===========================================
+CURRENT STATE:
+===========================================
+
+The frontend currently saves files locally in the browser using localStorage (base64 encoding).
+But for production, we need to send the files to your backend server where you will:
+- Save them to the server's filesystem
+- Process the CSV to get recipient information
+- Use the PDF as a template
+- Generate individual certificates for each recipient
+- Save the generated certificates
+- Return them to the frontend for download
+
+===========================================
+STEP 1: SET UP FILE UPLOAD ENDPOINTS
+===========================================
+
+Install the required package:
+  npm install multer
+
+Create a multer configuration file (backend/config/multer.js):
+
+  const multer = require('multer');
+  const path = require('path');
+  const fs = require('fs');
+
+  // Create uploads directory if it doesn't exist
+  const uploadsDir = path.join(__dirname, '../uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir);
+  }
+
+  const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, uploadsDir);
+    },
+    filename: function (req, file, cb) {
+      // Keep original filename with timestamp
+      cb(null, Date.now() + '-' + file.originalname);
+    }
+  });
+
+  const upload = multer({ storage: storage });
+
+  module.exports = upload;
+
+
+===========================================
+STEP 2: CREATE THE UPLOAD ROUTE
+===========================================
+
+Create backend/routes/upload.js:
+
+  const express = require('express');
+  const router = express.Router();
+  const upload = require('../config/multer');
+
+  // Upload CSV list
+  router.post('/csv', upload.single('csv'), (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      // Save file info to a database or return to client
+      res.json({
+        success: true,
+        filename: req.file.filename,
+        path: req.file.path,
+        size: req.file.size
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Upload PDF certificate template
+  router.post('/certificate', upload.single('certificate'), (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      res.json({
+        success: true,
+        filename: req.file.filename,
+        path: req.file.path,
+        size: req.file.size
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  module.exports = router;
+
+
+===========================================
+STEP 3: INSTALL PDF PROCESSING LIBRARIES
+===========================================
+
+You'll need to work with PDFs to generate certificates. Install:
+
+  npm install pdf-lib
+  npm install csv-parser
+
+The pdf-lib library allows you to:
+- Load a PDF template
+- Add text/fields to it
+- Save it as a new PDF
+
+===========================================
+STEP 4: CREATE CSV PARSING ROUTE
+===========================================
+
+Create backend/routes/process.js:
+
+  const express = require('express');
+  const router = express.Router();
+  const fs = require('fs');
+  const path = require('path');
+  const csv = require('csv-parser');
+  const { PDFDocument } = require('pdf-lib');
+
+  // Parse CSV file
+  router.get('/parse-csv/:filename', async (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const filepath = path.join(__dirname, '../uploads', filename);
+      
+      const results = [];
+      
+      fs.createReadStream(filepath)
+        .pipe(csv())
+        .on('data', (row) => {
+          results.push(row);
+        })
+        .on('end', () => {
+          res.json({
+            success: true,
+            data: results,
+            count: results.length
+          });
+        });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+
+===========================================
+STEP 5: CREATE CERTIFICATE GENERATION ROUTE
+===========================================
+
+This is where you generate certificates for each CSV row.
+
+Create backend/routes/generate.js:
+
+  const express = require('express');
+  const router = express.Router();
+  const fs = require('fs');
+  const path = require('path');
+  const { PDFDocument, rgb } = require('pdf-lib');
+  const csv = require('csv-parser');
+
+  router.post('/certificates', async (req, res) => {
+    try {
+      const { csvFilename, certificateFilename, fields } = req.body;
+
+      // Read the CSV file
+      const csvPath = path.join(__dirname, '../uploads', csvFilename);
+      const certPath = path.join(__dirname, '../uploads', certificateFilename);
+      
+      const recipients = [];
+      
+      // Parse CSV
+      fs.createReadStream(csvPath)
+        .pipe(csv())
+        .on('data', (row) => recipients.push(row))
+        .on('end', async () => {
+          const generatedFiles = [];
+          
+          // For each recipient, generate a certificate
+          for (const recipient of recipients) {
+            // Load the PDF template
+            const existingPdfBytes = fs.readFileSync(certPath);
+            const pdfDoc = await PDFDocument.load(existingPdfBytes);
+            
+            const pages = pdfDoc.getPages();
+            const firstPage = pages[0];
+            
+            // Add text to the PDF based on fields and recipient data
+            // Example: Add recipient name at coordinates (x, y)
+            // You'll need to adjust coordinates based on your template
+            fields.forEach(field => {
+              if (recipient[field.csvColumn]) {
+                firstPage.drawText(recipient[field.csvColumn], {
+                  x: field.x,
+                  y: field.y,
+                  size: field.fontSize || 12,
+                  color: rgb(0, 0, 0),
+                });
+              }
+            });
+            
+            // Save the generated PDF
+            const pdfBytes = await pdfDoc.save();
+            const outputPath = path.join(__dirname, '../uploads/generated', 
+              `certificate-${recipient.id || Date.now()}.pdf`);
+            
+            fs.writeFileSync(outputPath, pdfBytes);
+            generatedFiles.push(outputPath);
+          }
+          
+          res.json({
+            success: true,
+            count: generatedFiles.length,
+            files: generatedFiles
+          });
+        });
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  module.exports = router;
+
+
+===========================================
+STEP 6: UPDATE app.js TO USE NEW ROUTES
+===========================================
+
+In backend/app.js, add your new routes:
+
+  var uploadRouter = require('./routes/upload');
+  var processRouter = require('./routes/process');
+  var generateRouter = require('./routes/generate');
+
+  app.use('/api/upload', uploadRouter);
+  app.use('/api/process', processRouter);
+  app.use('/api/generate', generateRouter);
+
+
+===========================================
+STEP 7: HANDLE CORS (IMPORTANT!)
+===========================================
+
+Install cors:
+  npm install cors
+
+In backend/app.js, add:
+  const cors = require('cors');
+  app.use(cors());
+
+This allows the frontend to make requests to your backend.
+
+
+===========================================
+STEP 8: CREATE UPLOAD DIRECTORIES
+===========================================
+
+Create these directories in your backend folder:
+- backend/uploads/        (for uploaded files)
+- backend/uploads/generated/  (for generated certificates)
+
+
+===========================================
+SUMMARY OF WHAT YOU NEED TO DO:
+===========================================
+
+1. Install packages: multer, pdf-lib, csv-parser, cors
+2. Create config/multer.js for file upload configuration
+3. Create routes/upload.js for handling CSV and PDF uploads
+4. Create routes/process.js for parsing CSV files
+5. Create routes/generate.js for generating individual certificates
+6. Update app.js to use the new routes
+7. Add CORS middleware
+8. Create necessary directories
+
+===========================================
+TESTING YOUR API:
+===========================================
+
+You can test with Postman or curl:
+
+Upload CSV:
+  curl -X POST http://localhost:3001/api/upload/csv \
+    -F "csv=@/path/to/your/file.csv"
+
+Upload PDF:
+  curl -X POST http://localhost:3001/api/upload/certificate \
+    -F "certificate=@/path/to/your/certificate.pdf"
+
+Parse CSV:
+  curl http://localhost:3001/api/process/parse-csv/FILENAME.csv
+
+Generate Certificates:
+  curl -X POST http://localhost:3001/api/generate/certificates \
+    -H "Content-Type: application/json" \
+    -d '{
+      "csvFilename": "your-csv.csv",
+      "certificateFilename": "your-certificate.pdf",
+      "fields": [
+        {"csvColumn": "name", "x": 100, "y": 200, "fontSize": 16},
+        {"csvColumn": "date", "x": 100, "y": 180, "fontSize": 12}
+      ]
+    }'
+
+===========================================
+NOTES:
+===========================================
+
+- Adjust the x and y coordinates in the certificate generation to match where you want to place text on the PDF
+- The CSV columns should match the field names in your CSV file
+- You may need to install additional packages depending on your exact requirements
+- Consider adding error handling for edge cases
+- Add authentication if needed for production use
+

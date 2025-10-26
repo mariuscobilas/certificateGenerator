@@ -1,0 +1,34 @@
+version: '3.9'
+
+services:
+  backend:
+    image: mariuscobilas/certificategenerator-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+    working_dir: /app
+    command: npm start
+    networks:
+      - app-network
+
+  frontend:
+    image: mariuscobilas/certificategenerator-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    working_dir: /app
+    command: npm start
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
