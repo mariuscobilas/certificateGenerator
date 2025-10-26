@@ -4,14 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { Dropzone, DropzoneContent, DropzoneEmptyState } from "@/components/ui/shadcn-io/dropzone";
-import { useState } from "react";
+import {useEffect, useState} from "react";
 import { cn } from "@/lib/utils";
+import { uploadCsv, uploadCertificate } from "@/api/upload";
 
 export default function UploadPage() {
     const [list, setList] = useState<File[]>();
     const [certificate, setCertificate] = useState<File[]>();
     const [listError, setListError] = useState<string | null>(null);
     const [certificateError, setCertificateError] = useState<string | null>(null);
+    const [csvFilename, setCsvFilename] = useState<string | null>(null);
+    const [certificateFilename, setCertificateFilename] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     const validateFile = (file: File, type: 'csv' | 'pdf'): boolean => {
         if (type === 'csv') {
@@ -34,24 +38,44 @@ export default function UploadPage() {
         return false;
     };
 
-    const handleDropList = (files: File[]) => {
+    const handleDropList = async (files: File[]) => {
         console.log(files);
         if (files.length > 0) {
             const file = files[0];
             if (validateFile(file, 'csv')) {
                 setList(files);
-                setListError(null); // Clear any previous errors
+                setListError(null);
+                setIsUploading(true);
+                
+                // Upload to backend
+                const result = await uploadCsv(file);
+                if (result.success && result.filename) {
+                    setCsvFilename(result.filename);
+                } else {
+                    setListError(result.error || 'Failed to upload file to server');
+                }
+                setIsUploading(false);
             }
         }
     };
 
-    const handleDropCertificate = (files: File[]) => {
+    const handleDropCertificate = async (files: File[]) => {
         console.log(files);
         if (files.length > 0) {
             const file = files[0];
             if (validateFile(file, 'pdf')) {
                 setCertificate(files);
-                setCertificateError(null); // Clear any previous errors
+                setCertificateError(null);
+                setIsUploading(true);
+                
+                // Upload to backend
+                const result = await uploadCertificate(file);
+                if (result.success && result.filename) {
+                    setCertificateFilename(result.filename);
+                } else {
+                    setCertificateError(result.error || 'Failed to upload file to server');
+                }
+                setIsUploading(false);
             }
         }
     };
@@ -64,15 +88,22 @@ export default function UploadPage() {
         setCertificateError(error.message);
     };
 
-    const canContinue = list && list.length > 0 && certificate && certificate.length > 0 && !listError && !certificateError;   
+    const canContinue = csvFilename && certificateFilename && !listError && !certificateError && !isUploading;   
     // Debug logging
     console.log('Debug:', {
         list: list,
         certificate: certificate,
+        csvFilename,
+        certificateFilename,
         listError,
         certificateError,
+        isUploading,
         canContinue
     });
+
+    function handleOnClick() {
+        
+    }
 
     return (
         <div className="flex h-screen w-screen items-center justify-center bg-gray-100 font-sans">
@@ -131,17 +162,30 @@ export default function UploadPage() {
                         </div>
                     </div>
                     
+                    {isUploading && (
+                        <p className="text-sm text-muted-foreground">Uploading files...</p>
+                    )}
                     <div className="flex gap-4">
                         <Button variant="ghost" asChild>
                             <Link href="/" className="text-gray-600">Back</Link>
                         </Button>
                         {canContinue ? (
-                            <Button variant="default" asChild>
-                                <Link href="/certificate">Continue</Link>
-                            </Button>
-                        ) : (
-                            <Button variant="default" disabled>
+                            <Link
+                                href="/certificate"
+                                onClick={() => {
+                                    // Store filenames to pass to next page
+                                    if (csvFilename && certificateFilename) {
+                                        sessionStorage.setItem('csvFilename', csvFilename);
+                                        sessionStorage.setItem('certificateFilename', certificateFilename);
+                                    }
+                                }}
+                                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                            >
                                 Continue
+                            </Link>
+                        ) : (
+                            <Button variant="default" disabled onClick={handleOnClick}>
+                                {isUploading ? 'Uploading...' : 'Continue'}
                             </Button>
                         )}
                     </div>

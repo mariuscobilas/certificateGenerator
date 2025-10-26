@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "../app/globals.css";
+import {inter, roboto, montserrat, greatVibes, playfairDisplay} from "@/app/utils/fonts";
 
-const inter = Inter({
-  variable: "--font-inter-sans",
-  subsets: ["latin"],
-});
+
 
 export const metadata: Metadata = {
   title: "Certificate Generator",
@@ -20,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} antialiased `}
+        className={`${inter.variable}, ${roboto.variable}, ${montserrat.variable}, ${playfairDisplay.variable}, ${greatVibes.variable} antialiased `}
       >
         {children}
       </body>
