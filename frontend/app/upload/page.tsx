@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { Dropzone, DropzoneContent, DropzoneEmptyState } from "@/components/ui/shadcn-io/dropzone";
-import {useEffect, useState} from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { uploadCsv, uploadCertificate } from "@/api/upload";
 
@@ -39,27 +39,37 @@ export default function UploadPage() {
     };
 
     const handleDropList = async (files: File[]) => {
+        if (isUploading || files.length === 0) return; // Prevent new upload if busy or no files
+
         console.log(files);
-        if (files.length > 0) {
-            const file = files[0];
-            if (validateFile(file, 'csv')) {
-                setList(files);
-                setListError(null);
-                setIsUploading(true);
-                
+        const file = files[0];
+
+        if (validateFile(file, 'csv')) {
+            setList(files);
+            setListError(null);
+            setIsUploading(true);
+
+            try {
                 // Upload to backend
                 const result = await uploadCsv(file);
                 if (result.success && result.filename) {
                     setCsvFilename(result.filename);
                 } else {
                     setListError(result.error || 'Failed to upload file to server');
+                    setList(undefined); // Clear file on error
                 }
+            } catch (error) {
+                setListError('An unexpected upload error occurred.');
+                setList(undefined); // Clear file on error
+            } finally {
                 setIsUploading(false);
             }
         }
     };
 
     const handleDropCertificate = async (files: File[]) => {
+        if (isUploading || files.length === 0) return; // Prevent new upload if busy or no files
+
         console.log(files);
         if (files.length > 0) {
             const file = files[0];
@@ -67,15 +77,22 @@ export default function UploadPage() {
                 setCertificate(files);
                 setCertificateError(null);
                 setIsUploading(true);
-                
-                // Upload to backend
-                const result = await uploadCertificate(file);
-                if (result.success && result.filename) {
-                    setCertificateFilename(result.filename);
-                } else {
-                    setCertificateError(result.error || 'Failed to upload file to server');
+
+                try {
+                    // Upload to backend
+                    const result = await uploadCertificate(file);
+                    if (result.success && result.filename) {
+                        setCertificateFilename(result.filename);
+                    } else {
+                        setCertificateError(result.error || 'Failed to upload file to server');
+                        setCertificate(undefined); // Clear file on error
+                    }
+                } catch (error) {
+                    setCertificateError('An unexpected upload error occurred.');
+                    setCertificate(undefined); // Clear file on error
+                } finally {
+                    setIsUploading(false);
                 }
-                setIsUploading(false);
             }
         }
     };
@@ -88,11 +105,12 @@ export default function UploadPage() {
         setCertificateError(error.message);
     };
 
-    const canContinue = csvFilename && certificateFilename && !listError && !certificateError && !isUploading;   
+    const canContinue = csvFilename && certificateFilename && !listError && !certificateError && !isUploading;
+
     // Debug logging
     console.log('Debug:', {
-        list: list,
-        certificate: certificate,
+        list,
+        certificate,
         csvFilename,
         certificateFilename,
         listError,
@@ -100,10 +118,6 @@ export default function UploadPage() {
         isUploading,
         canContinue
     });
-
-    function handleOnClick() {
-        
-    }
 
     return (
         <div className="flex h-screen w-screen items-center justify-center bg-gray-100 font-sans">
@@ -113,7 +127,7 @@ export default function UploadPage() {
                         <p className="text-lg font-medium text-primary">1. Upload files</p>
                         <Progress className="w-[414px] h-4" value={25} />
                     </div>
-                    
+
                     <div className="flex items-center justify-center w-full gap-6">
                         {/* CSV Upload */}
                         <div className="flex-1">
@@ -127,8 +141,9 @@ export default function UploadPage() {
                                 )}
                                 filetype="list"
                                 accept={{
-                                    '.csv file': ['.csv']
+                                    'text/csv': ['.csv']
                                 }}
+                                disabled={isUploading}
                             >
                                 <DropzoneEmptyState className="w-full h-full" />
                                 <DropzoneContent />
@@ -150,8 +165,9 @@ export default function UploadPage() {
                                 )}
                                 filetype="certificate"
                                 accept={{
-                                    '.pdf file': ['.pdf']
+                                    'application/pdf': ['.pdf']
                                 }}
+                                disabled={isUploading}
                             >
                                 <DropzoneEmptyState />
                                 <DropzoneContent />
@@ -161,7 +177,7 @@ export default function UploadPage() {
                             )}
                         </div>
                     </div>
-                    
+
                     {isUploading && (
                         <p className="text-sm text-muted-foreground">Uploading files...</p>
                     )}
@@ -184,7 +200,7 @@ export default function UploadPage() {
                                 Continue
                             </Link>
                         ) : (
-                            <Button variant="default" disabled onClick={handleOnClick}>
+                            <Button variant="default" disabled>
                                 {isUploading ? 'Uploading...' : 'Continue'}
                             </Button>
                         )}

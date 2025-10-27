@@ -7,6 +7,8 @@ export interface UploadResponse {
   filename?: string;
   path?: string;
   size?: number;
+  originalname?: string;
+  files?: string[]; // For list responses
   error?: string;
 }
 
@@ -18,7 +20,7 @@ export async function uploadCsv(file: File): Promise<UploadResponse> {
   formData.append('csv', file);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/upload/csv`, {
+    const response = await fetch(`${API_BASE_URL}/uploads/csv`, {
       method: 'POST',
       body: formData,
     });
@@ -46,7 +48,7 @@ export async function uploadCertificate(file: File): Promise<UploadResponse> {
   formData.append('certificate', file);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/upload/certificate`, {
+    const response = await fetch(`${API_BASE_URL}/uploads/certificate`, {
       method: 'POST',
       body: formData,
     });
@@ -66,51 +68,49 @@ export async function uploadCertificate(file: File): Promise<UploadResponse> {
   }
 }
 
+/**
+ * Get list of CSV files
+ */
 export async function getCsv(): Promise<UploadResponse> {
-  const formData = new FormData();
-
   try {
-    const response = await fetch(`${API_BASE_URL}/upload/csv`, {
+    const response = await fetch(`${API_BASE_URL}/uploads/csv`, {
       method: 'GET',
-      body: formData,
-    })
+    });
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.error || 'Failed to get csv');
     }
     const data = await response.json();
     return data;
-  }catch (error) {
+  } catch (error) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get csv',
-    }
+    };
   }
 }
 
+/**
+ * Get list of certificate files
+ */
 export async function getCertificate(): Promise<UploadResponse> {
-  const formData = new FormData();
-
   try {
-    const response = await fetch(`${API_BASE_URL}/upload/certificate`, {
+    const response = await fetch(`${API_BASE_URL}/uploads/certificate`, {
       method: 'GET',
-      body: formData,
-    })
+    });
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.error || 'Failed to get certificate');
     }
     const data = await response.json();
     return data;
-  }catch (error) {
+  } catch (error) {
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get certificate',
-    }
+    };
   }
 }
-
-
 
 /**
  * Generate certificates based on uploaded files and fields configuration
@@ -149,4 +149,3 @@ export async function generateCertificates(data: {
     };
   }
 }
-
